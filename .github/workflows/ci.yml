@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        id: tests
+        run: python -m pytest -v --junitxml=results.xml
+        continue-on-error: true
+
+      - name: Build JSON report
+        if: always()
+        run: python scripts/build_report.py
+
+      - name: Send report to local receiver
+        if: always()
+        run: |
+          curl -fsS --retry 3 -X POST \
+            -H "Content-Type: application/json" \
+            --data @report.json \
+            "${{ secrets.RECEIVER_URL }}"
+
+      - name: Email report (bonus, runs only if EMAIL_TO secret is set)
+        if: always() && env.EMAIL_TO != ''
+        run: python scripts/send_email.py
+
+      - name: Fail the job if tests failed
+        if: always() && steps.tests.outcome == 'failure'
+        run: |
+          echo "Tests failed"
+          exit 1
+
+  # Bonus: deploy the static demo only when ALL tests passed on main.
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

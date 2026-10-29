@@ -1,7 +1,7 @@
 """Input validation for the assignment submission portal."""
 from urllib.parse import urlparse
 
-REQUIRED_FIELDS = ("name", "title", "url")
+REQUIRED_FIELDS = ("name", "reg_no", "title", "url")
 
 LABELS = {
     "name": "Name",
